@@ -3,7 +3,7 @@ import json
 
 # Define constants for file paths
 FOLDER_PATH = './data/vote'
-OUTPUT_FILE = './data/processed/VOTE_17.json'
+OUTPUT_FILE = './data/processed/vote_17.json'
 
 
 def get_voters_list(voters_data: dict or None) -> list:

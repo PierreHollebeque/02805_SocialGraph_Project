@@ -104,7 +104,7 @@ def main():
             del deputee_data['organ']['date']
 
     output_dir = 'data/processed/'
-    output_filename = 'deputees.json'
+    output_filename = 'deputees_17.json'
     with open(os.path.join(output_dir, output_filename), 'w', encoding='utf-8') as f:
         json.dump(deputees, f, indent=1, ensure_ascii=False)
 
