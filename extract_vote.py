@@ -22,7 +22,6 @@ def get_voters_list(voters_data: dict or None) -> list:
     if voters_data is None:
         return []
     
-    # Use .get() to safely access 'votant'
     votants = voters_data.get("votant")
     if votants is None:
         return []
@@ -44,8 +43,6 @@ def process_json_files(folder: str):
     """
     legislature_vote = {}
     
-    # Using os.scandir() is generally more performant than os.listdir() 
-    # for checking file properties.
     for entry in os.scandir(folder):
         # Filter for files ending with '.json'
         if entry.is_file() and entry.name.endswith('.json'):
@@ -92,7 +89,6 @@ def process_json_files(folder: str):
                 # Safely get the detailed vote count
                 voters = organ.get("vote", {}).get("decompteNominatif", {})
 
-                # Extend the main lists using the helper function
                 votes_for.extend(get_voters_list(voters.get("pours")))
                 votes_against.extend(get_voters_list(voters.get("contres")))
                 votes_novote.extend(get_voters_list(voters.get("nonVotants")))
@@ -109,8 +105,6 @@ def process_json_files(folder: str):
                 "votes_abs": votes_abs
             }
 
-    # IMPORTANT: Write the output file ONLY ONCE after all files have been processed.
-    # This is significantly more efficient than writing in every loop iteration.
     if legislature_vote:
         print(f"\n✅ Writing final output file: {OUTPUT_FILE}")
         with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
@@ -120,6 +114,5 @@ def process_json_files(folder: str):
         print("\n⚠️ No votes processed. Output file was not created.")
 
 
-# Standard entry point for a Python script
 if __name__ == "__main__":
     process_json_files(FOLDER_PATH)
