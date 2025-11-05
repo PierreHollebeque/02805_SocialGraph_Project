@@ -9,7 +9,8 @@ def create_deputee_base(id):
     return {
         'name' : name,
         'chair_numbers': [],
-        'organ' : {}
+        'organ' : {},
+        'speeches': []
     }
 
 def get_organ_name(id) :
@@ -44,7 +45,95 @@ def compare_date(date1_str, date2_str):
 
 
 path = 'data/vote/'
+cr_path = 'data/cr/'
+
 deputees = {}
+
+def process_compte_rendu_files():
+    """Process all compte_rendu JSON files to track deputy speeches."""
+    
+    if not os.path.exists(cr_path):
+        print(f"Warning: compte_rendu directory not found at {cr_path}")
+        return
+    
+    file_count = 0
+    for cr_filename in os.listdir(cr_path):
+        if not cr_filename.endswith('.json'):
+            continue
+            
+        file_count += 1
+        print(f"Processing compte_rendu: {cr_filename}", end='\r')
+        
+        cr_file_path = os.path.join(cr_path, cr_filename)
+        try:
+            with open(cr_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Navigate to contenu/point
+            if 'contenu' not in data:
+                continue
+                
+            contenu = data['contenu']
+            
+            # Handle both single point and list of points
+            points = []
+            if 'point' in contenu:
+                point_data = contenu['point']
+                if isinstance(point_data, list):
+                    points = point_data
+                elif isinstance(point_data, dict):
+                    points = [point_data]
+            
+            # Process each point
+            for point in points:
+                if 'paragraphe' not in point:
+                    continue
+                
+                paragraphes = point['paragraphe']
+                if isinstance(paragraphes, dict):
+                    paragraphes = [paragraphes]
+                
+                # Process each paragraph
+                for para in paragraphes:
+                    if not isinstance(para, dict):
+                        continue
+                    
+                    # Check if paragraph has orateurs and a speaker
+                    if 'orateurs' in para and para['orateurs']:
+                        orateurs = para['orateurs']
+                        
+                        # Handle both single orateur and list of orateurs
+                        orateur_list = []
+                        if 'orateur' in orateurs:
+                            orateur_data = orateurs['orateur']
+                            if isinstance(orateur_data, list):
+                                orateur_list = orateur_data
+                            elif isinstance(orateur_data, dict):
+                                orateur_list = [orateur_data]
+                        
+                        # Process each speaker
+                        for orateur in orateur_list:
+                            if 'id' in orateur:
+                                acteur_id = 'PA' + orateur['id']
+                                
+                                # Get or create deputy
+                                if acteur_id not in deputees:
+                                    try:
+                                        deputees[acteur_id] = create_deputee_base(acteur_id)
+                                    except:
+                                        continue
+                                
+                                # Extract text from paragraph
+                                text = ""
+                                if 'texte' in para:
+                                    text = para['texte']
+
+                                deputees[acteur_id]['speeches'].append(text)
+        
+        except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
+            print(f"Could not process file {cr_file_path}: {e}")
+    
+    print(f"\nProcessed {file_count} compte_rendu files")
 
 def main():
     if os.path.exists(path):
@@ -97,6 +186,8 @@ def main():
             except (json.JSONDecodeError, KeyError) as e:
                 print(f"Could not process file {path_file}: {e}")
 
+    print("\nProcessing compte_rendu files...")
+    process_compte_rendu_files()
 
     for deputee_data in deputees.values():
         # On vérifie si 'organ' existe et si 'date' est dans 'organ' avant de supprimer
