@@ -1,4 +1,4 @@
-import os,json, pandas as pd, numpy as np
+import os,json
 from datetime import datetime
 
 def create_deputee_base(id):
