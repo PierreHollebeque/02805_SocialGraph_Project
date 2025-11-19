@@ -126,7 +126,10 @@ def process_compte_rendu_files():
                                 # Extract text from paragraph
                                 text = ""
                                 if 'texte' in para:
-                                    text = para['texte']
+                                    if isinstance(para['texte'], str):
+                                        text = para['texte']
+                                    else :
+                                        print(cr_filename,para['texte'])
 
                                 deputees[acteur_id]['speeches'].append(text)
         
