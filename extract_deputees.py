@@ -51,7 +51,7 @@ def get_organ_name(id) :
             'name' : data['organe']['libelle'],
             'name_from' : data['organe']['libelleEdition'],
             'name_short' : data['organe']['libelleAbrege'],
-            'color' : data['organe']['couleurAssociee']
+            'color': data['organe']['couleurAssociee'] if data['organe']['couleurAssociee'] else '#cccccc'
         }
     else :
         return {}
