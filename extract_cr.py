@@ -126,7 +126,7 @@ def download_all_compte_rendus(reunion_folder: str, output_folder: str, delay: f
             failed += 1
         
         # Be respectful to the server - add delay between requests
-        if i < len(cr_refs):  # Don't delay after last request
+        if i < len(cr_refs):
             time.sleep(delay)
     
     print(f"\n=== Download Complete ===")
@@ -139,4 +139,4 @@ if __name__ == '__main__':
     reunion_folder = "data/reunion"
     compte_rendu_folder = "data/cr"
 
-    download_all_compte_rendus(reunion_folder, compte_rendu_folder, delay=0.5)
+    download_all_compte_rendus(reunion_folder, compte_rendu_folder, delay=0)
