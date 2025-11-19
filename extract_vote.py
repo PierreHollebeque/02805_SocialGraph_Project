@@ -58,6 +58,17 @@ def get_voters_list(voters_data: dict or None) -> list:
         return []
 
 
+# --- NEW helper to accept multiple possible key names (singular/plural) ---
+def extend_from_positions(collector: list, voters: dict, *keys):
+    """
+    Add voters to collector checking multiple possible keys (e.g. "pours" or "pour").
+    """
+    if not isinstance(voters, dict):
+        return
+    for k in keys:
+        collector.extend(get_voters_list(voters.get(k)))
+
+
 def process_single_vote_json(scrutin: dict) -> dict or None:
     """
     Processes a single vote (scrutin) structure and returns the vote data.
@@ -138,10 +149,11 @@ def process_single_vote_json(scrutin: dict) -> dict or None:
         if not isinstance(voters, dict):
             continue
             
-        votes_for.extend(get_voters_list(voters.get("pours")))
-        votes_against.extend(get_voters_list(voters.get("contres")))
-        votes_novote.extend(get_voters_list(voters.get("nonVotants")))
-        votes_abs.extend(get_voters_list(voters.get("abstentions")))
+        # Support both plural (pours/contres) and singular (pour/contre) keys used across legislatures
+        extend_from_positions(votes_for, voters, "pours", "pour")
+        extend_from_positions(votes_against, voters, "contres", "contre")
+        extend_from_positions(votes_novote, voters, "nonVotants", "nonVotant")
+        extend_from_positions(votes_abs, voters, "abstentions", "abstention")
 
     return {
         "date": date_scrutin,
