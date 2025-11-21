@@ -1,4 +1,5 @@
 import os,json
+import xml.etree.ElementTree as ET
 from datetime import datetime
 
 # Legislature configurations
@@ -11,13 +12,13 @@ LEGISLATURE_CONFIGS = {
     },
     '15': {
         'vote_path': 'data/vote/15',
-        'cr_path': None,  # No compte rendu for 15
+        'cr_path': 'data/cr/15',
         'output': 'data/processed/deputees_15.json',
         'is_single_file': False
     },
     '16': {
         'vote_path': 'data/vote/16',
-        'cr_path': None,  # No compte rendu for 16
+        'cr_path': 'data/cr/16',
         'output': 'data/processed/deputees_16.json',
         'is_single_file': False
     },
@@ -73,7 +74,7 @@ def compare_date(date1_str, date2_str):
 
 
 def process_compte_rendu_files(deputees, cr_path):
-    """Process all compte_rendu JSON files to track deputy speeches."""
+    """Process all compte_rendu XML files to track deputy speeches."""
     
     if not cr_path or not os.path.exists(cr_path):
         print(f"Skipping compte_rendu processing (path: {cr_path})")
@@ -81,7 +82,7 @@ def process_compte_rendu_files(deputees, cr_path):
     
     file_count = 0
     for cr_filename in os.listdir(cr_path):
-        if not cr_filename.endswith('.json'):
+        if not cr_filename.endswith('.xml'):
             continue
             
         file_count += 1
@@ -89,72 +90,30 @@ def process_compte_rendu_files(deputees, cr_path):
         
         cr_file_path = os.path.join(cr_path, cr_filename)
         try:
-            with open(cr_file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            tree = ET.parse(cr_file_path)
+            root = tree.getroot()
             
-            # Navigate to contenu/point
-            if 'contenu' not in data:
-                continue
-                
-            contenu = data['contenu']
+            # Define namespace if present
+            ns = {'ns': 'http://schemas.assemblee-nationale.fr/referentiel'} if root.tag.startswith('{') else {}
             
-            # Handle both single point and list of points
-            points = []
-            if 'point' in contenu:
-                point_data = contenu['point']
-                if isinstance(point_data, list):
-                    points = point_data
-                elif isinstance(point_data, dict):
-                    points = [point_data]
+            # Find all paragraphs
+            paragraphes = root.findall('.//{*}paragraphe') if ns else root.findall('.//paragraphe')
             
-            # Process each point
-            for point in points:
-                if 'paragraphe' not in point:
-                    continue
+            for paragraphe in paragraphes:
+                # Get the actor ID from the paragraph's id_acteur attribute
+                acteur_id = paragraphe.get('id_acteur')
                 
-                paragraphes = point['paragraphe']
-                if isinstance(paragraphes, dict):
-                    paragraphes = [paragraphes]
-                
-                # Process each paragraph
-                for para in paragraphes:
-                    if not isinstance(para, dict):
-                        continue
+                if acteur_id and acteur_id.startswith('PA'):
                     
-                    # Check if paragraph has orateurs and a speaker
-                    if 'orateurs' in para and para['orateurs']:
-                        orateurs = para['orateurs']
-                        
-                        # Handle both single orateur and list of orateurs
-                        orateur_list = []
-                        if 'orateur' in orateurs:
-                            orateur_data = orateurs['orateur']
-                            if isinstance(orateur_data, list):
-                                orateur_list = orateur_data
-                            elif isinstance(orateur_data, dict):
-                                orateur_list = [orateur_data]
-                        
-                        # Process each speaker
-                        for orateur in orateur_list:
-                            if 'id' in orateur:
-                                acteur_id = 'PA' + orateur['id']
-                                
-                                # Get or create deputy
-                                if acteur_id not in deputees:
-                                    try:
-                                        deputees[acteur_id] = create_deputee_base(acteur_id)
-                                    except:
-                                        continue
-                                
-                                # Extract text from paragraph
-                                text = ""
-                                if 'texte' in para:
-                                    text = para['texte']
-
-                                deputees[acteur_id]['speeches'].append(text)
+                    # Extract text from texte element
+                    texte_elem = paragraphe.find('{*}texte') if ns else paragraphe.find('texte')
+                    if texte_elem is not None and texte_elem.text:
+                        text = texte_elem.text.strip()
+                        if text:  # Only add non-empty speeches
+                            deputees[acteur_id]['speeches'].append(text)
         
-        except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
-            print(f"Could not process file {cr_file_path}: {e}")
+        except (ET.ParseError, KeyError, FileNotFoundError) as e:
+            print(f"\nCould not process file {cr_file_path}: {e}")
     
     print(f"\nProcessed {file_count} compte_rendu files")
 
