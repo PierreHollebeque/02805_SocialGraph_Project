@@ -9,7 +9,6 @@ data/
 │   ├── acteur/
 │   ├── deport/
 │   └── organe/
-├── reunion/
 ├── cr/
 ├── processed/
 └── vote/
@@ -35,9 +34,5 @@ data/
 * **16**: [https://data.assemblee-nationale.fr/archives-16e/votes](https://data.assemblee-nationale.fr/archives-16e/votes)
 * **17**: [https://data.assemblee-nationale.fr/travaux-parlementaires/votes](https://data.assemblee-nationale.fr/travaux-parlementaires/votes)
 
-## Reunions
-
-* **16**: [https://data.assemblee-nationale.fr/archives-16e/reunions](https://data.assemblee-nationale.fr/archives-16e/reunions)
-* **17**: [https://data.assemblee-nationale.fr/reunions/reunions](https://data.assemblee-nationale.fr/reunions/reunions)
 
 
