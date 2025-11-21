@@ -25,7 +25,7 @@ def collect_compte_rendu_refs(reunion_folder: str) -> Set[str]:
             reunion = data.get("reunion", {})
             compte_rendu_ref = reunion.get("compteRenduRef")
 
-            if compte_rendu_ref and compte_rendu_ref.startswith("CRS"):  # Only add non-null values and CRSANR beginning
+            if compte_rendu_ref and compte_rendu_ref.startswith("CRSAN"):  # Only add non-null values and CRSAN beginning
                 compte_rendu_refs.add(compte_rendu_ref)
                 
         except Exception as e:
@@ -136,7 +136,11 @@ def download_all_compte_rendus(reunion_folder: str, output_folder: str, delay: f
 
 
 if __name__ == '__main__':
-    reunion_folder = "data/reunion"
-    compte_rendu_folder = "data/cr"
+    reunion_folder_16 = "data/reunion/16"
+    compte_rendu_folder_16 = "data/cr/16"
+    
+    reunion_folder_17 = "data/reunion/17"
+    compte_rendu_folder_17 = "data/cr/17"
 
-    download_all_compte_rendus(reunion_folder, compte_rendu_folder, delay=0.5)
+    download_all_compte_rendus(reunion_folder_16, compte_rendu_folder_16, delay=0.1)
+    download_all_compte_rendus(reunion_folder_17, compte_rendu_folder_17, delay=0.1)
