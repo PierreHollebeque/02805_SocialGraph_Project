@@ -1,5 +1,34 @@
 import os,json
+import xml.etree.ElementTree as ET
 from datetime import datetime
+
+# Legislature configurations
+LEGISLATURE_CONFIGS = {
+    '14': {
+        'vote_path': 'data/vote/14/Scrutins_XIV.json',
+        'cr_path': None,  # No compte rendu for 14
+        'output': 'data/processed/deputees_14.json',
+        'is_single_file': True
+    },
+    '15': {
+        'vote_path': 'data/vote/15',
+        'cr_path': 'data/cr/15',
+        'output': 'data/processed/deputees_15.json',
+        'is_single_file': False
+    },
+    '16': {
+        'vote_path': 'data/vote/16',
+        'cr_path': 'data/cr/16',
+        'output': 'data/processed/deputees_16.json',
+        'is_single_file': False
+    },
+    '17': {
+        'vote_path': 'data/vote/17',
+        'cr_path': 'data/cr/',
+        'output': 'data/processed/deputees_17.json',
+        'is_single_file': False
+    }
+}
 
 def create_deputee_base(id):
     path_file = 'data/all_actors/acteur/' + id +'.json'
@@ -23,7 +52,7 @@ def get_organ_name(id) :
             'name' : data['organe']['libelle'],
             'name_from' : data['organe']['libelleEdition'],
             'name_short' : data['organe']['libelleAbrege'],
-            'color' : data['organe']['couleurAssociee']
+            'color': data['organe']['couleurAssociee'] if data['organe']['couleurAssociee'] else '#cccccc'
         }
     else :
         return {}
@@ -44,21 +73,16 @@ def compare_date(date1_str, date2_str):
   
 
 
-path = 'data/vote/'
-cr_path = 'data/cr/'
-
-deputees = {}
-
-def process_compte_rendu_files():
-    """Process all compte_rendu JSON files to track deputy speeches."""
+def process_compte_rendu_files(deputees, cr_path):
+    """Process all compte_rendu XML files to track deputy speeches."""
     
-    if not os.path.exists(cr_path):
-        print(f"Warning: compte_rendu directory not found at {cr_path}")
+    if not cr_path or not os.path.exists(cr_path):
+        print(f"Skipping compte_rendu processing (path: {cr_path})")
         return
     
     file_count = 0
     for cr_filename in os.listdir(cr_path):
-        if not cr_filename.endswith('.json'):
+        if not cr_filename.endswith('.xml'):
             continue
             
         file_count += 1
@@ -66,141 +90,235 @@ def process_compte_rendu_files():
         
         cr_file_path = os.path.join(cr_path, cr_filename)
         try:
-            with open(cr_file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            tree = ET.parse(cr_file_path)
+            root = tree.getroot()
             
-            # Navigate to contenu/point
-            if 'contenu' not in data:
-                continue
-                
-            contenu = data['contenu']
+            # Define namespace if present
+            ns = {'ns': 'http://schemas.assemblee-nationale.fr/referentiel'} if root.tag.startswith('{') else {}
             
-            # Handle both single point and list of points
-            points = []
-            if 'point' in contenu:
-                point_data = contenu['point']
-                if isinstance(point_data, list):
-                    points = point_data
-                elif isinstance(point_data, dict):
-                    points = [point_data]
+            # Find all paragraphs
+            paragraphes = root.findall('.//{*}paragraphe') if ns else root.findall('.//paragraphe')
             
-            # Process each point
-            for point in points:
-                if 'paragraphe' not in point:
-                    continue
+            for paragraphe in paragraphes:
+                # Get the actor ID from the paragraph's id_acteur attribute
+                acteur_id = paragraphe.get('id_acteur')
                 
-                paragraphes = point['paragraphe']
-                if isinstance(paragraphes, dict):
-                    paragraphes = [paragraphes]
-                
-                # Process each paragraph
-                for para in paragraphes:
-                    if not isinstance(para, dict):
-                        continue
+                if acteur_id and acteur_id.startswith('PA'):
                     
-                    # Check if paragraph has orateurs and a speaker
-                    if 'orateurs' in para and para['orateurs']:
-                        orateurs = para['orateurs']
-                        
-                        # Handle both single orateur and list of orateurs
-                        orateur_list = []
-                        if 'orateur' in orateurs:
-                            orateur_data = orateurs['orateur']
-                            if isinstance(orateur_data, list):
-                                orateur_list = orateur_data
-                            elif isinstance(orateur_data, dict):
-                                orateur_list = [orateur_data]
-                        
-                        # Process each speaker
-                        for orateur in orateur_list:
-                            if 'id' in orateur:
-                                acteur_id = 'PA' + orateur['id']
-                                
-                                # Get or create deputy
-                                if acteur_id not in deputees:
-                                    try:
-                                        deputees[acteur_id] = create_deputee_base(acteur_id)
-                                    except:
-                                        continue
-                                
-                                # Extract text from paragraph
-                                text = ""
-                                if 'texte' in para:
-                                    text = para['texte']
-
-                                deputees[acteur_id]['speeches'].append(text)
+                    # Extract text from texte element
+                    texte_elem = paragraphe.find('{*}texte') if ns else paragraphe.find('texte')
+                    if texte_elem is not None and texte_elem.text:
+                        text = texte_elem.text.strip()
+                        if text:  # Only add non-empty speeches
+                            deputees[acteur_id]['speeches'].append(text)
         
-        except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
-            print(f"Could not process file {cr_file_path}: {e}")
+        except (ET.ParseError, KeyError, FileNotFoundError) as e:
+            print(f"\nCould not process file {cr_file_path}: {e}")
     
     print(f"\nProcessed {file_count} compte_rendu files")
 
-def main():
-    if os.path.exists(path):
-        for votes_filename in os.listdir(path):
-            print(votes_filename,end='\r')
-            path_file = os.path.join(path, votes_filename)
-            try:
-                with open(path_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+def process_single_vote_file(vote_data, deputees):
+    """Process a single vote data structure (for both formats)."""
+    try:
+        # Check if this is a scrutin wrapper or direct scrutin
+        scrutin = vote_data.get('scrutin', vote_data)
+        
+        if 'ventilationVotes' not in scrutin:
+            return
+        
+        ventilation = scrutin['ventilationVotes']
+        if not isinstance(ventilation, dict):
+            return
+            
+        organe = ventilation.get('organe', {})
+        if not isinstance(organe, dict):
+            return
+            
+        groupes = organe.get('groupes', {})
+        if not isinstance(groupes, dict):
+            return
+            
+        organs_list = groupes.get('groupe', [])
+        if isinstance(organs_list, dict):
+            organs_list = [organs_list]
+        
+        date = scrutin.get('dateScrutin', '1900-01-01')
+
+        for organ in organs_list:
+            if not isinstance(organ, dict):
+                continue
                 
-                # Defensive coding: check if keys exist before accessing
-                if 'scrutin' not in data or 'ventilationVotes' not in data['scrutin']:
+            organ_id = organ.get('organeRef')
+            if not organ_id:
+                continue
+                
+            organ_data = get_organ_name(organ_id)
+            if not organ_data:
+                continue
+                
+            vote_data_nested = organ.get('vote', {})
+            if not isinstance(vote_data_nested, dict):
+                continue
+                
+            votes_by_position = vote_data_nested.get('decompteNominatif', {})
+            if not isinstance(votes_by_position, dict):
+                continue
+            
+            # Iterate through vote positions
+            for position in votes_by_position.values():
+                if not isinstance(position, dict):
                     continue
-
-                organs_list = data['scrutin']['ventilationVotes']['organe']['groupes']['groupe']
-                date = data['scrutin']['dateScrutin']
-
-                for organ in organs_list:
-                    # Assuming get_organ_name is a function you have defined
-                    organ_id = organ['organeRef']
-                    organ_data = get_organ_name(organ_id)
-                    if organ_data :
-                        votes_by_position = organ['vote']['decompteNominatif']
+                    
+                if position and 'votant' in position:
+                    votants_data = position['votant']
+                    if isinstance(votants_data, dict):
+                        votants_list = [votants_data]
+                    else:
+                        votants_list = votants_data
+                    
+                    for votant in votants_list:
+                        if not isinstance(votant, dict):
+                            continue
+                            
+                        acteur_ref = votant.get('acteurRef')
+                        chair_number = votant.get('numPlace')
                         
-                        # Iterate through vote positions ('pour', 'contre', 'abstention', etc.)
-                        for position in votes_by_position.values():
-                            # Process only if there are voters for this position
-                            if position and 'votant' in position:
-                                votants_data = position['votant']
-                                if isinstance(votants_data, dict):
-                                    votants_list = [votants_data]
-                                else:
-                                    votants_list = votants_data
-                                for votant in votants_list:
-                                    acteur_ref = votant['acteurRef']
-                                    chair_number = votant['numPlace']
-                                    # Get the deputy from our main dict, or create a new one
-                                    deputee = deputees.get(acteur_ref)
-                                    if not deputee:
-                                        # Assuming create_deputee_base is a function you have defined
-                                        deputee = create_deputee_base(acteur_ref)
-                                    
-                                    if chair_number not in deputee['chair_numbers'] :
-                                        deputee['chair_numbers'].append(chair_number)
-                                    
-                                    if organ_id != deputee['organ'].get('id',False) and compare_date(date,deputee['organ'].get('date','1900-01-01')) :
-                                        deputee['organ'] = organ_data
-                                        deputee['organ']['date'] = date
-                                        deputees[acteur_ref] = deputee
-            except (json.JSONDecodeError, KeyError) as e:
-                print(f"Could not process file {path_file}: {e}")
+                        if not acteur_ref:
+                            continue
+                        
+                        # Get the deputy from our main dict, or create a new one
+                        deputee = deputees.get(acteur_ref)
+                        if not deputee:
+                            try:
+                                deputee = create_deputee_base(acteur_ref)
+                            except:
+                                continue
+                        
+                        if chair_number and chair_number not in deputee['chair_numbers']:
+                            deputee['chair_numbers'].append(chair_number)
+                        
+                        if organ_id != deputee['organ'].get('id', False) and compare_date(date, deputee['organ'].get('date', '1900-01-01')):
+                            deputee['organ'] = organ_data
+                            deputee['organ']['date'] = date
+                        
+                        deputees[acteur_ref] = deputee
+    except Exception as e:
+        print(f"Error processing vote: {e}")
 
-    print("\nProcessing compte_rendu files...")
-    process_compte_rendu_files()
+def process_folder_format(vote_path, deputees):
+    """Process votes from a folder of JSON files."""
+    if not os.path.exists(vote_path):
+        print(f"Warning: Vote directory not found at {vote_path}")
+        return
+    
+    file_count = 0
+    for votes_filename in os.listdir(vote_path):
+        if not votes_filename.endswith('.json'):
+            continue
+            
+        file_count += 1
+        print(f"Processing vote file: {votes_filename}", end='\r')
+        
+        path_file = os.path.join(vote_path, votes_filename)
+        try:
+            with open(path_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            process_single_vote_file(data, deputees)
+        except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
+            print(f"Could not process file {path_file}: {e}")
+    
+    print(f"\nProcessed {file_count} vote files from folder")
 
+def process_single_file_format(vote_path, deputees):
+    """Process votes from a single consolidated JSON file (legislature 14)."""
+    if not os.path.exists(vote_path):
+        print(f"Warning: Vote file not found at {vote_path}")
+        return
+    
+    print(f"Processing single vote file: {vote_path}")
+    
+    try:
+        with open(vote_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        scrutins_list = data.get("scrutins", {}).get("scrutin", [])
+        
+        if not isinstance(scrutins_list, list):
+            print(f"Warning: 'scrutin' is not a list in {vote_path}")
+            return
+        
+        print(f"Found {len(scrutins_list)} votes in file")
+        
+        for idx, scrutin in enumerate(scrutins_list):
+            if idx % 100 == 0:
+                print(f"Processing vote {idx}/{len(scrutins_list)}", end='\r')
+            process_single_vote_file(scrutin, deputees)
+        
+        print(f"\nProcessed {len(scrutins_list)} votes from single file")
+    except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
+        print(f"Could not process file {vote_path}: {e}")
+
+def process_legislature(config):
+    """Process a single legislature based on its configuration."""
+    vote_path = config['vote_path']
+    cr_path = config['cr_path']
+    output_path = config['output']
+    is_single_file = config['is_single_file']
+    
+    print(f"\n{'='*60}")
+    print(f"Processing: {vote_path}")
+    print(f"Output: {output_path}")
+    print(f"{'='*60}\n")
+    
+    deputees = {}
+    
+    # Process votes
+    if is_single_file:
+        process_single_file_format(vote_path, deputees)
+    else:
+        process_folder_format(vote_path, deputees)
+    
+    # Process compte rendu (only for legislature 17)
+    if cr_path:
+        print("\nProcessing compte_rendu files...")
+        process_compte_rendu_files(deputees, cr_path)
+    
+    # Clean up temporary date fields
     for deputee_data in deputees.values():
-        # On vérifie si 'organ' existe et si 'date' est dans 'organ' avant de supprimer
         if 'organ' in deputee_data and 'date' in deputee_data['organ']:
             del deputee_data['organ']['date']
+    
+    # Save results
+    if deputees:
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(deputees, f, indent=1, ensure_ascii=False)
+        
+        print(f"\n✅ Successfully saved {len(deputees)} deputees to {output_path}")
+    else:
+        print(f"\n⚠️ No deputees found for {vote_path}")
 
-    output_dir = 'data/processed/'
-    output_filename = 'deputees_17.json'
-    with open(os.path.join(output_dir, output_filename), 'w', encoding='utf-8') as f:
-        json.dump(deputees, f, indent=1, ensure_ascii=False)
-
-    print(f"Successfully saved {len(deputees)} deputees to {output_filename}")
-
+def main():
+    # Process all legislatures
+    for legislature_num, config in LEGISLATURE_CONFIGS.items():
+        print(f"\n\n{'#'*60}")
+        print(f"# LEGISLATURE {legislature_num}")
+        print(f"{'#'*60}")
+        
+        try:
+            process_legislature(config)
+        except Exception as e:
+            print(f"❌ Error processing legislature {legislature_num}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    print(f"\n\n{'='*60}")
+    print("ALL LEGISLATURES PROCESSED")
+    print(f"{'='*60}")
 
 if __name__ == '__main__':
     main()
