@@ -12,19 +12,19 @@ LEGISLATURE_CONFIGS = {
     },
     '15': {
         'vote_path': 'data/vote/15',
-        'cr_path': 'data/cr/15',
+        'cr_path': None,
         'output': 'data/processed/deputees_15.json',
         'is_single_file': False
     },
     '16': {
         'vote_path': 'data/vote/16',
-        'cr_path': 'data/cr/16',
+        'cr_path': None,
         'output': 'data/processed/deputees_16.json',
         'is_single_file': False
     },
     '17': {
         'vote_path': 'data/vote/17',
-        'cr_path': 'data/cr/',
+        'cr_path': None,
         'output': 'data/processed/deputees_17.json',
         'is_single_file': False
     }
